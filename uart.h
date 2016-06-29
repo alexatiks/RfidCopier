@@ -2,6 +2,9 @@
 
 #ifndef UART_H
 #define UART_H
+#define CHAR 0
+#define INT  1
+#define LONG 2
 #define TX_NEWLINE {transmitByte(0x0d); transmitByte(0x0a);}
 
 /** Function to receive a single byte */

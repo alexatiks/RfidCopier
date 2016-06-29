@@ -4,7 +4,11 @@
 #include "ili9320.h"
 #include "uart.h"
 
-#define T_POLL 0//132//140//165
+#define T_POLL 0
+
+#define FOSC 16000000// Clock Speed
+#define BAUD 38400//19200
+#define MYUBRR FOSC/16/BAUD-1
 
 float max = 0.25;
 float min = 0.1;
@@ -13,11 +17,10 @@ int data;
 float v;
 uint x = 10;
 uint y = 30;
-//uchar string[8];
+uchar string[16];
 uint i = 0;
 uint last = 1;
 uint bol = 0;
-uint k = 0;
 uint ci = 0;
 
 
@@ -45,20 +48,15 @@ ISR (TIMER0_OVF_vect) {
     //LCD_PutPixel(x,y-10,0x0000);
 }
 
-//UART0 initialize
-// desired baud rate: 19200
-// actual: baud rate:19231 (0.2%)
-// char size: 8 bit
-// parity: Disabled
-void uart0_init(void) {
-    UCSRB = 0x00; //disable while setting baud rate
-    UCSRA = 0x00;
-    UCSRC = (1 << URSEL) | 0x06;
-    UBRRL = 0x19; //set baud rate lo
-    UBRRH = 52;//0x00; //set baud rate hi
-    UCSRB = 0x18;
+void USART_Init(unsigned int ubrr) {
+/* Set baud rate */
+    UBRRH = (unsigned char) (ubrr >> 8);
+    UBRRL = (unsigned char) ubrr;
+/* Enable receiver and transmitter */
+    UCSRB = (1 << RXEN) | (1 << TXEN);
+/* Set frame format: 8data, 1stop bit */
+    UCSRC = (1 << URSEL) | (3 << UCSZ0);
 }
-
 
 /* Print pulses into display */
 void print_rfid() {
@@ -110,11 +108,13 @@ void change(int value) {
     }
 }
 
+uchar buffer[20];
+
 void main(void) {
     init_IO();
     LED_OFF;
-    LCD_reset();
-    LCD_init();
+    //  LCD_reset();
+    //  LCD_init();
     init_pwm();
 
     ACSR = 0x80;
@@ -125,34 +125,18 @@ void main(void) {
     uint count = 0;
     uint tim = 0;
     setup();
+    USART_Init(MYUBRR);
     sei();
-   // uart0_init;
-
-    // print_rfid();
-    // uchar cha = 0x01;
-    // LCD_DrawChar(i+5,10,cha,0x00FF);
-    // cha |= (1 << 0);
-    //cha = cha << 1;
-    // LCD_DrawChar(10,10,cha,0x00FF);
-    LED_ON;
-    _delay_ms(200);
-    LED_OFF;
 
     TX_NEWLINE;
-    transmitString_F(PSTR("> 0 : Erase Blocks"));
+    transmitString_F(PSTR("Start"));
     TX_NEWLINE;
-    transmitString_F(PSTR("> 1 : Write single Block"));
-    TX_NEWLINE;
-    transmitString_F(PSTR("> 2 : Read single Block"));
 
-    LED_ON;
-    _delay_ms(200);
-    LED_OFF;
-/*
     find_long_path:
     last = 1;
     TCNT0 = T_POLL;
     i = 0;
+    ci = 0;
     change(0);
     tim = TCNT0;
     TCNT0 = T_POLL;
@@ -163,7 +147,6 @@ void main(void) {
     else
         goto find_long_path;
 
-
     goto first;
 
     find:
@@ -172,18 +155,17 @@ void main(void) {
     tim = TCNT0;
     TCNT0 = 0;
     first:
+
+    string[ci] <<= 1;
+
     if (tim >= 28 & tim <= 38)//32
     {
         if (last == 0) {
-            // string[i] = '0';
-           // string[ci] &= (1 << 0);
-            cha &= (1 << 0);
+            string[ci] &= ~(1 << 0);
             last = 0;
         }
         else if (last == 1) {
-            // string[i] = '1';
-           // string[ci] |= (1 << 0);
-            cha |= (1 << 0);
+            string[ci] |= (1 << 0);
             last = 1;
         }
         i++;
@@ -191,33 +173,25 @@ void main(void) {
     else if (tim >= 40 & tim <= 57) //53
     {
         if (last == 0) {
-            // string[i] = '1';
-           // string[ci] |= (1 << 0);
-            cha |= (1 << 0);
+            string[ci] |= (1 << 0);
             i++;
             last = 1;
         }
         else if (last == 1) {
-            // string[i] = '0';
-           // string[ci] &= (1 << 0);
-            cha &= (1 << 0);
+            string[ci] &= ~(1 << 0);
             i++;
-            // string[i] = '0';
-            //string[ci] &= (1 << 0);
-            cha &= (1 << 0);
+            string[ci] <<= 1;
+            string[ci] &= ~(1 << 0);
             i++;
             last = 0;
         }
     }
     else if (tim >= 60 & tim <= 68) //64
     {
-        //string[i] = '0';
-        //string[ci] &= (1 << 0);
-        cha &= (1 << 0);
+        string[ci] &= ~(1 << 0);
         i++;
-        //string[i] = '1';
-       // string[ci] |= (1 << 0);
-         cha |= (1 << 0);
+        string[ci] <<= 1;
+        string[ci] |= (1 << 0);
         i++;
         last = 1;
     }
@@ -226,59 +200,22 @@ void main(void) {
 
     }
 
-  //  LCD_DrawChar(10,10,cha,0x00FF);
-
     if (i % 7 == 0) {
         ci++;
-        LCD_DrawChar(i+5,10,'1',0x00FF);
     }
 
-
-    if (i >= 63)
+    if (i >= 127)
         goto end;
     goto find;
 
     end:
-  //  LCD_DrawString(string, x, y, 0x00FF);
-    goto kol;
- /*   k = 0;
-    for (int i = 0; i <= 129; i++) {
-        if (string[i] == '1') {
-            k++;
-        }
-        else {
-            k = 0;
-        }
-        if (k == 9) {
-            for (int l = 0; l < 9; l++) {
-                LCD_DrawChar(x, y, '1', 0x00FF);
-                x += 7;
-            }
-            for (int l = i + 1; l < i + 56; l++) {
-                LCD_DrawChar(x, y, string[l], 0x00FF);
-                x += 7;
-                if (x > 320) {
-                    x = 5;
-                    y = y + 20;
-                }
-            }
-
-            goto kol;
-        }
+    TX_NEWLINE;
+    for (int op = 0; op <= ci; op++) {
+        transmitHex(CHAR, string[op]);
     }
-    goto find_long_path;
-*/
-    /*   kol:
 
-       LED_ON;
-       _delay_ms(200);
-       LED_OFF;
-       _delay_ms(1000);
-       LCD_clear(0xffff);
 
-       _delay_ms(1000);
-       x = 10;
-       y = 30;
+    TX_NEWLINE;
+    transmitString_F(PSTR("Finish"));
 
-       goto find_long_path;*/
 }
