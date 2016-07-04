@@ -48,7 +48,6 @@ void setup() {
 
 ISR (TIMER0_OVF_vect) {
     TCNT0 = T_POLL;
-    //LCD_PutPixel(x,y-10,0x0000);
 }
 
 void USART_Init(unsigned int ubrr) {
@@ -64,13 +63,10 @@ void USART_Init(unsigned int ubrr) {
 /* Print pulses into display */
 void print_rfid() {
     while (1) {
-        //LCD_clear(0xFFFF);
         ADCSRA |= 0x40;
         data = ADCW;
         v = 3.16 - (float) data * 0.003088;
         //sprintf(string, "%1.2f", v);
-        //LCD_DrawString(string,60,60,0x00FF);
-        //LCD_PutPixel(x, y - v * 100, 0x00FF);
         //x += 4;
 
         if (v > maxLimit)
