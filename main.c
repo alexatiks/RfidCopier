@@ -1,17 +1,18 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
+#include <stdbool.h>
 #include "ili9320.h"
 #include "uart.h"
 
 #define T_POLL 0
 
 #define FOSC 16000000// Clock Speed
-#define BAUD 38400//19200
+#define BAUD 38400 //
 #define MYUBRR FOSC/16/BAUD-1
 
-float max = 0.25;
-float min = 0.1;
+float maxLimit = 0.25;
+float minLimit = 0.1;
 
 int data;
 float v;
@@ -20,8 +21,10 @@ uint y = 30;
 uchar string[16];
 uint i = 0;
 uint last = 1;
-uint bol = 0;
+bool bol = false;
 uint ci = 0;
+uint count = 0;
+uint tim = 0;
 
 
 /* Generating a PWM frequency 125 kHz */
@@ -70,9 +73,9 @@ void print_rfid() {
         //LCD_PutPixel(x, y - v * 100, 0x00FF);
         //x += 4;
 
-        if (v > max)
+        if (v > maxLimit)
             LCD_PutPixel(x, y - 20, 0x00FF);
-        if (v < min)
+        if (v < minLimit)
             LCD_PutPixel(x, y, 0x00FF);
         x++;
 
@@ -92,29 +95,24 @@ void print_rfid() {
 }
 
 /* ожидание смены уровня, value - текущий уровень */
-void change(int value) {
+void change(bool value) {
     while (1) {
         ADCSRA |= 0x40;
         data = ADCW;
         v = 3.16 - (float) data * 0.003088;
-        if (value == 0 & v > max)
-            bol = 1;
-        if (value == 1 & v < min)
-            bol = 1;
-        if (bol == 1 & value == 0 & v > max | bol == 1 & value == 1 & v < min) {
-            bol = 0;
+        if (value == 0 & v > maxLimit)
+            bol = true;
+        if (value == 1 & v < minLimit)
+            bol = true;
+        if (bol & value == 0 & v > maxLimit | bol & value == 1 & v < minLimit) {
+            bol = false;
             break;
         }
     }
 }
 
-uchar buffer[20];
-
 void main(void) {
     init_IO();
-    LED_OFF;
-    //  LCD_reset();
-    //  LCD_init();
     init_pwm();
 
     ACSR = 0x80;
@@ -122,8 +120,6 @@ void main(void) {
     ADMUX = 0b01000000;
     ADCSRA = 0x85;
 
-    uint count = 0;
-    uint tim = 0;
     setup();
     USART_Init(MYUBRR);
     sei();
@@ -142,7 +138,7 @@ void main(void) {
     TCNT0 = T_POLL;
     change(1);
     count = TCNT0;
-    if (count >= 20 & count <= 40) //280..560
+    if (count >= 20 & count <= 40) //280..560 20..40
     { }
     else
         goto find_long_path;
@@ -158,7 +154,7 @@ void main(void) {
 
     string[ci] <<= 1;
 
-    if (tim >= 28 & tim <= 38)//32
+    if (tim >= 28 & tim <= 38)//32 28..38
     {
         if (last == 0) {
             string[ci] &= ~(1 << 0);
@@ -186,7 +182,7 @@ void main(void) {
             last = 0;
         }
     }
-    else if (tim >= 60 & tim <= 68) //64
+    else if (tim >= 60 & tim <= 68) //64 60..68
     {
         string[ci] &= ~(1 << 0);
         i++;

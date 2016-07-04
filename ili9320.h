@@ -100,6 +100,7 @@ void init_IO(void) {
     PORTD = 0x00;
     RS_0;
     DDRA = 0xFE;
+    LED_OFF;
 }
 
 
