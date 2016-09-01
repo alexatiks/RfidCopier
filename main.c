@@ -11,11 +11,13 @@
 #define BAUD 38400 //
 #define MYUBRR FOSC/16/BAUD-1
 
-float maxLimit = 0.25;
-float minLimit = 0.1;
+float maxVoltageLevel = 0.25;
+float minVoltageLevel = 0.1;
+float currentVoltageLevel;
 
-int data;
-float v;
+
+int adcData;
+
 uint x = 10;
 uint y = 30;
 uchar string[16];
@@ -62,20 +64,20 @@ void USART_Init(unsigned int ubrr) {
 }
 
 /* Print pulses into display */
-void print_rfid() {
+void printPulsesDisplay() {
     while (1) {
         //LCD_clear(0xFFFF);
         ADCSRA |= 0x40;
-        data = ADCW;
-        v = 3.16 - (float) data * 0.003088;
+        adcData = ADCW;
+        currentVoltageLevel = 3.16 - (float) adcData * 0.003088;
         //sprintf(string, "%1.2f", v);
         //LCD_DrawString(string,60,60,0x00FF);
         //LCD_PutPixel(x, y - v * 100, 0x00FF);
         //x += 4;
 
-        if (v > maxLimit)
+        if (currentVoltageLevel > maxVoltageLevel)
             LCD_PutPixel(x, y - 20, 0x00FF);
-        if (v < minLimit)
+        if (currentVoltageLevel < minVoltageLevel)
             LCD_PutPixel(x, y, 0x00FF);
         x++;
 
@@ -94,24 +96,24 @@ void print_rfid() {
     }
 }
 
-/* ожидание смены уровня, value - текущий уровень */
+/* Wait while voltage level changes, value - current voltage level */
 void change(bool value) {
     while (1) {
         ADCSRA |= 0x40;
-        data = ADCW;
-        v = 3.16 - (float) data * 0.003088;
-        if (value == 0 & v > maxLimit)
+        adcData = ADCW;
+        currentVoltageLevel = 3.16 - (float) adcData * 0.003088;
+        if (value == 0 & currentVoltageLevel > maxVoltageLevel)
             bol = true;
-        if (value == 1 & v < minLimit)
+        if (value == 1 & currentVoltageLevel < minVoltageLevel)
             bol = true;
-        if (bol & value == 0 & v > maxLimit | bol & value == 1 & v < minLimit) {
+        if (bol & value == 0 & currentVoltageLevel > maxVoltageLevel | bol & value == 1 & currentVoltageLevel < minVoltageLevel) {
             bol = false;
             break;
         }
     }
 }
 
-void main(void) {
+int main(void) {
     init_IO();
     init_pwm();
 
@@ -139,7 +141,7 @@ void main(void) {
     change(1);
     count = TCNT0;
     if (count >= 20 & count <= 40) //280..560 20..40
-    { }
+    {}
     else
         goto find_long_path;
 
@@ -159,21 +161,18 @@ void main(void) {
         if (last == 0) {
             string[ci] &= ~(1 << 0);
             last = 0;
-        }
-        else if (last == 1) {
+        } else if (last == 1) {
             string[ci] |= (1 << 0);
             last = 1;
         }
         i++;
-    }
-    else if (tim >= 40 & tim <= 57) //53
+    } else if (tim >= 40 & tim <= 57) //53
     {
         if (last == 0) {
             string[ci] |= (1 << 0);
             i++;
             last = 1;
-        }
-        else if (last == 1) {
+        } else if (last == 1) {
             string[ci] &= ~(1 << 0);
             i++;
             string[ci] <<= 1;
@@ -181,8 +180,7 @@ void main(void) {
             i++;
             last = 0;
         }
-    }
-    else if (tim >= 60 & tim <= 68) //64 60..68
+    } else if (tim >= 60 & tim <= 68) //64 60..68
     {
         string[ci] &= ~(1 << 0);
         i++;
@@ -190,8 +188,7 @@ void main(void) {
         string[ci] |= (1 << 0);
         i++;
         last = 1;
-    }
-    else {
+    } else {
         goto find_long_path;
 
     }
@@ -213,5 +210,5 @@ void main(void) {
 
     TX_NEWLINE;
     transmitString_F(PSTR("Finish"));
-
+    return 0;
 }
